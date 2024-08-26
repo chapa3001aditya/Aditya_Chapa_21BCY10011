@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>URN-Based Chess Game</title>
+    <style>
+        #board {
+            display: grid;
+            grid-template-columns: repeat(5, 50px);
+            grid-template-rows: repeat(5, 50px);
+            gap: 2px;
+        }
+        .cell {
+            width: 50px;
+            height: 50px;
+            border: 1px solid #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            cursor: pointer;
+        }
+        .A {
+            color: blue;
+        }
+        .B {
+            color: red;
+        }
+    </style>
+</head>
+<body>
+    <h1>URN-Based Chess Game</h1>
+    <div id="board"></div>
+    <h2 id="turn">Turn: A</h2>
+    <div id="message"></div>
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.4.1/socket.io.js"></script>
+    <script>
+        var socket = io();
+        var selectedCharacter = null;
+
+        socket.on('connect', function() {
+            socket.emit('initialize');
+        });
+
+        socket.on('game_state', function(state) {
+            renderBoard(state.board);
+            document.getElementById('turn').innerText = "Turn: " + state.turn;
+            document.getElementById('message').innerText = "";
+            selectedCharacter = null;
+        });
+
+        socket.on('invalid_move', function(data) {
+            document.getElementById('message').innerText = data.error;
+        });
+
+        socket.on('game_over', function(data) {
+            alert('Game Over! Winner: ' + data.winner);
+        });
+
+        function renderBoard(board) {
+            var boardDiv = document.getElementById('board');
+            boardDiv.innerHTML = '';
+            for (var i = 0; i < board.length; i++) {
+                for (var j = 0; j < board[i].length; j++) {
+                    var cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = i;
+                    cell.dataset.col = j;
+                    if (board[i][j]) {
+                        cell.innerText = board[i][j];
+                        cell.classList.add(board[i][j].charAt(0));
+                    }
+                    cell.addEventListener('click', handleCellClick);
+                    boardDiv.appendChild(cell);
+                }
+            }
+        }
+
+        function handleCellClick(event) {
+            var cell = event.target;
+            var row = cell.dataset.row;
+            var col = cell.dataset.col;
+            var currentTurn = document.getElementById('turn').innerText.split(' ')[1];
+
+            if (!selectedCharacter && cell.innerText && cell.classList.contains(currentTurn)) {
+                selectedCharacter = {
+                    character: cell.innerText,
+                    row: row,
+                    col: col
+                };
+            } else if (selectedCharacter) {
+                // Make a move
+                var move = getMoveCommand(selectedCharacter, row, col);
+                if (move) {
+                    socket.emit('player_move', {
+                        player: currentTurn,
+                        character: selectedCharacter.character,
+                        move: move
+                    });
+                }
+            }
+        }
+
+        function getMoveCommand(characterInfo, newRow, newCol) {
+            var rowDiff = newRow - characterInfo.row;
+            var colDiff = newCol - characterInfo.col;
+
+            if (characterInfo.character.startsWith('B-')) {
+                // Reverse interpretation for Player B
+                if (colDiff === -1) return 'F'; // Left for Player A is Right for Player B
+                if (colDiff === 1) return 'R';  // Right for Player A is Left for Player B
+                if (rowDiff === -1) return 'B'; // Forward for Player A is Backward for Player B
+                if (rowDiff === 1) return 'B';  // Backward for Player A is Forward for Player B
+            } else {
+                // Normal interpretation for Player A
+                if (colDiff === -1) return 'L'; // Left
+                if (colDiff === 1) return 'R';  // Right
+                if (rowDiff === -1) return 'F'; // Forward
+                if (rowDiff === 1) return 'B';  // Backward
+            }
+
+            // Handle diagonal moves (no change needed for diagonal directions)
+            if (rowDiff === -1 && colDiff === -1) return 'FL'; // Forward-Left
+            if (rowDiff === -1 && colDiff === 1) return 'FR';  // Forward-Right
+            if (rowDiff === 1 && colDiff === -1) return 'BL';  // Backward-Left
+            if (rowDiff === 1 && colDiff === 1) return 'BR';   // Backward-Right
+
+            return null;
+        }
+
+
+    </script>
+</body>
+</html>
